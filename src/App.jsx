@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { LearningProvider } from "@/contexts/LearningContext";
+import ProtectedRoute from "@/components/ProtectedRoute";
 // Pages
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
@@ -19,6 +20,7 @@ import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
 import PracticeLab from "./pages/PracticeLab";
 import StudyRoom from "./pages/StudyRoom";
+import MentorConnect from './pages/MentorConnect';
 import VerifyCertificate from "./pages/VerifyCertificate";
 import NotFound from "./pages/NotFound";
 import { useEffect } from "react";
@@ -64,7 +66,8 @@ const App = () => {
                 <Route path="/notifications" element={<Notifications />} />
                 <Route path="/profile" element={<Profile />} />
                 <Route path="/practice-lab" element={<PracticeLab />} />
-                <Route path="/study-room" element={<StudyRoom />} />
+                <Route path="/study-room" element={<ProtectedRoute><StudyRoom /></ProtectedRoute>} />
+                <Route path="/mentor-connect" element={<ProtectedRoute><MentorConnect /></ProtectedRoute>} />
                 <Route path="/settings" element={<Settings />} />
 
                 {/* Catch-all */}
