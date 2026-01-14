@@ -28,6 +28,7 @@ load_dotenv(BASE_DIR / '.env')
 SECRET_KEY = 'django-insecure-++q+!-b5r!^#u9n&#p8(#)%uzf=r@7coa*j9n=)_*v5-n)a61#'
 
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
+YOUTUBE_API_KEY = os.getenv('YOUTUBE_API_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -160,3 +161,16 @@ SIMPLE_JWT = {
     'BLACKLIST_AFTER_ROTATION': True,
     'UPDATE_LAST_LOGIN': True,
 }
+
+# Email Settings (Gmail SMTP)
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
+
+# Twilio Settings
+TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID')
+TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
+TWILIO_WHATSAPP_NUMBER = os.getenv('TWILIO_WHATSAPP_NUMBER')

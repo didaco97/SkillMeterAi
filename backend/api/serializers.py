@@ -25,6 +25,8 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
+        from .models import LearnerProfile
+        
         user = User.objects.create(
             username=validated_data['username'],
             email=validated_data['email'],
@@ -33,6 +35,13 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         )
         user.set_password(validated_data['password'])
         user.save()
+        
+        # Auto-create LearnerProfile with default WhatsApp number
+        LearnerProfile.objects.get_or_create(
+            user=user,
+            defaults={'phone_number': '+919518380879'}
+        )
+        
         return user
 
 

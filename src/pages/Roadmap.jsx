@@ -6,59 +6,48 @@ import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { useLearning } from '@/contexts/LearningContext';
-import { PlayCircle, FileText, CheckCircle2, Circle, Clock, ArrowRight, Download, Award } from 'lucide-react';
+import { PlayCircle, FileText, CheckCircle2, Circle, Clock, ArrowRight, Award, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
-import Certificate from '@/components/Certificate';
-import html2canvas from 'html2canvas';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 
 export default function Roadmap() {
   const { currentRoadmap, selectConcept } = useLearning();
-  const { user } = useAuth();
+  const { authFetch } = useAuth();
   const navigate = useNavigate();
-  const certificateRef = useRef(null);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [showCertificate, setShowCertificate] = useState(false);
 
   const handleDownloadCertificate = async () => {
     if (!currentRoadmap) return;
 
     setIsGenerating(true);
-    setShowCertificate(true);
+    try {
+      // Call backend API which generates PDF and sends email notification
+      const response = await authFetch(`http://localhost:8000/api/roadmaps/${currentRoadmap.id}/certificate/`);
 
-    // Wait for the certificate to render
-    setTimeout(async () => {
-      try {
-        if (certificateRef.current) {
-          const canvas = await html2canvas(certificateRef.current, {
-            scale: 2,
-            useCORS: true,
-            allowTaint: true,
-            backgroundColor: '#ffffff'
-          });
-
-          const link = document.createElement('a');
-          link.download = `SkillMeter_Certificate_${currentRoadmap.course.title.replace(/\s+/g, '_')}.png`;
-          link.href = canvas.toDataURL('image/png');
-          link.click();
-        }
-      } catch (error) {
-        console.error('Certificate generation error:', error);
-        alert('Could not generate certificate. Please try again.');
-      } finally {
-        setIsGenerating(false);
-        setShowCertificate(false);
+      if (response.ok) {
+        // Download the PDF blob
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `SkillMeter_Certificate_${currentRoadmap.course.title.replace(/\s+/g, '_')}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      } else {
+        const errorData = await response.json();
+        alert(errorData.error || 'Could not generate certificate.');
       }
-    }, 500);
+    } catch (error) {
+      console.error('Certificate generation error:', error);
+      alert('Could not generate certificate. Please try again.');
+    } finally {
+      setIsGenerating(false);
+    }
   };
-
-  // Generate certificate data
-  const userName = user ? `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username : 'Learner';
-  const courseTitle = currentRoadmap?.course?.title || 'Course';
-  const completionDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-  const certificateId = currentRoadmap ? `SM-${currentRoadmap.id}-${Date.now().toString(36).toUpperCase()}` : 'SM-XXX';
 
   if (!currentRoadmap) {
     return (<DashboardLayout>
@@ -94,11 +83,16 @@ export default function Roadmap() {
               {progress === 100 && (
                 <Button
                   onClick={handleDownloadCertificate}
+                  disabled={isGenerating}
                   variant="outline"
                   className="border-2 border-black hover:bg-black hover:text-white transition-all"
                 >
-                  <Award className="mr-2 h-4 w-4" />
-                  Certificate
+                  {isGenerating ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Award className="mr-2 h-4 w-4" />
+                  )}
+                  {isGenerating ? 'Generating...' : 'Certificate'}
                 </Button>
               )}
               <Button onClick={() => navigate('/learn')}>
@@ -153,19 +147,6 @@ export default function Roadmap() {
           </Accordion>
         </CardContent>
       </Card>
-
-      {/* Hidden Certificate for html2canvas capture */}
-      {showCertificate && (
-        <div className="fixed top-[-9999px] left-[-9999px]">
-          <Certificate
-            ref={certificateRef}
-            userName={userName}
-            courseTitle={courseTitle}
-            completionDate={completionDate}
-            certificateId={certificateId}
-          />
-        </div>
-      )}
     </div>
   </DashboardLayout>);
 }

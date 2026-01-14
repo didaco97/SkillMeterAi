@@ -10,7 +10,7 @@ import logging
 genai.configure(api_key=settings.GEMINI_API_KEY)
 
 class YouTubeService:
-    API_KEY = "AIzaSyB4EHKDlEUrUXrsEOndDLGQ6GnGMgmnMWA"
+    API_KEY = settings.YOUTUBE_API_KEY
     
     @staticmethod
     def search_video(query):

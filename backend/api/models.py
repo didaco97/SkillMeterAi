@@ -17,6 +17,7 @@ class LearnerProfile(models.Model):
     skill_level = models.CharField(max_length=20, choices=SKILL_LEVELS, default='beginner')
     learning_goals = models.JSONField(default=list, blank=True)  # List of goal IDs
     daily_study_time = models.IntegerField(default=30)  # Minutes per day
+    phone_number = models.CharField(max_length=20, default='+919518380879', help_text="For WhatsApp notifications")
     onboarding_completed = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -259,5 +260,31 @@ class StudySession(models.Model):
     def __str__(self):
         return f"{self.user.username} - {self.started_at.strftime('%Y-%m-%d %H:%M')}"
 
+
     class Meta:
         ordering = ['-ended_at']
+
+
+class NotificationLog(models.Model):
+    """
+    Logs backend notifications sent via Email or WhatsApp.
+    """
+    TYPE_CHOICES = [
+        ('EMAIL', 'Email'),
+        ('WHATSAPP', 'WhatsApp')
+    ]
+    STATUS_CHOICES = [
+        ('SENT', 'Sent'),
+        ('FAILED', 'Failed')
+    ]
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notification_logs')
+    notification_type = models.CharField(max_length=20, choices=TYPE_CHOICES)
+    event_name = models.CharField(max_length=100)  # e.g., "Module Completed"
+    recipient = models.CharField(max_length=255)   # Email or Phone Number
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='SENT')
+    error_message = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.notification_type} - {self.event_name} - {self.user.username}"
