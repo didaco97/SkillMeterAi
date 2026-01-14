@@ -39,6 +39,7 @@ SkillMeter AI is a comprehensive, AI-powered learning management system that cre
 - 🏆 Course completion certificates
 - 💻 Integrated code playground (Monaco Editor)
 - 📝 AI-generated notes and quizzes
+- 🧠 AI-powered Study Room with distraction monitoring
 - 🎨 Beautiful Neo-Brutalist UI design
 
 ---
@@ -214,6 +215,14 @@ SkillMeter AI is a comprehensive, AI-powered learning management system that cre
 | **PostCSS** | 8.5.6 | CSS transformations |
 | **Autoprefixer** | 10.4.21 | CSS vendor prefixing |
 | **@vitejs/plugin-react-swc** | 3.11.0 | SWC-powered React plugin for Vite |
+
+### Computer Vision & Audio
+
+| Library | Version | Purpose |
+|---------|---------|---------|
+| **@mediapipe/face_mesh** | 0.4.x | Real-time 468-point face landmark detection |
+| **@mediapipe/camera_utils** | 0.3.x | Camera stream handling |
+| **Web Audio API** | Native | Real-time audio synthesis for alerts |
 
 ---
 
@@ -416,6 +425,17 @@ class Lab(models.Model):
     files = JSONField()              # [{name, language, content}, ...]
 ```
 
+#### 13. StudySession
+```python
+class StudySession(models.Model):
+    user = ForeignKey(User)
+    started_at = DateTimeField()
+    end_time = DateTimeField()      # Nullable
+    total_duration = IntegerField()  # Seconds
+    distraction_count = IntegerField()
+    focus_percentage = IntegerField()
+```
+
 ### Entity Relationship Diagram
 
 ```
@@ -496,6 +516,19 @@ class YouTubeService:
 2. YouTubeService searches for matching videos
 3. Video URLs and thumbnails are stored in Concept model
 
+### Piston API (Code Execution)
+
+| Property | Value |
+|----------|-------|
+| **Endpoint** | `https://emkc.org/api/v2/piston` |
+| **Purpose** | Secure remote code execution for Practice Lab |
+| **Supported Languages** | JavaScript, Python, Java, C++, Go, Rust, etc. |
+
+**Usage in Practice Lab:**
+- **Endpoint**: `/execute`
+- **Mechanism**: Sends source code + stdin to Piston Sandbox
+- **Security**: Runs code in isolated containers to prevent malicious actions
+
 ---
 
 ## 🎨 Features & Components
@@ -518,6 +551,7 @@ class YouTubeService:
 | **Settings** | `Settings.jsx` | App preferences |
 | **NotFound** | `NotFound.jsx` | 404 page |
 | **Index** | `Index.jsx` | Route redirect |
+| **StudyRoom** | `StudyRoom.jsx` | AI focus monitoring, real-time distraction tracking |
 
 ### Custom Components
 
@@ -690,6 +724,7 @@ GEMINI_API_KEY=your_gemini_api_key_here
 | **Video API** | YouTube Data API v3 |
 | **PDF Generation** | ReportLab |
 | **Screenshot** | html2canvas |
+| **Computer Vision** | MediaPipe Face Mesh |
 
 ---
 
