@@ -179,6 +179,9 @@ def mark_concept_complete(request, concept_id):
 
             # --- Notification Trigger: Course Completion (100%) ---
             if roadmap_progress == 100:
+                # Set the completion timestamp (Root Fix: Accurate completion date)
+                Roadmap.objects.filter(user=request.user, course=course, completed_at__isnull=True).update(completed_at=timezone.now())
+                
                 print(f"🎉 Triggering Completion Notifications for {request.user.username}")
                 # 1. Email
                 send_email_notification(
@@ -582,9 +585,14 @@ def generate_certificate(request, roadmap_id):
     if roadmap.progress < 100:
         return Response({'error': 'Course not completed yet. Complete all lessons to get your certificate.'}, status=400)
     
-    # Generate unique certificate ID
-    cert_data = f"{request.user.id}-{roadmap_id}-{roadmap.course.title}"
-    cert_id = hashlib.sha256(cert_data.encode()).hexdigest()[:12].upper()
+    # Generate or Retrieve unique certificate ID
+    if roadmap.certificate_id:
+        cert_id = roadmap.certificate_id
+    else:
+        cert_data = f"{request.user.id}-{roadmap_id}-{roadmap.course.title}"
+        cert_id = hashlib.sha256(cert_data.encode()).hexdigest()[:12].upper()
+        roadmap.certificate_id = cert_id
+        roadmap.save()
     
     # Generate PDF Content using Utility
     from .utils.certificate import generate_certificate_pdf
@@ -625,6 +633,33 @@ def generate_certificate(request, roadmap_id):
         print(f"Failed to send certificate notifications: {e}")
 
     return response
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def verify_certificate(request, cert_id):
+    """
+    Public API to verify a certificate by its unique ID.
+    Returns certificate details if valid.
+    """
+    try:
+        roadmap = Roadmap.objects.get(certificate_id=cert_id)
+        
+        # Ensure it's completed (security check)
+        if roadmap.progress < 100:
+            return Response({'error': 'Certificate invalid'}, status=400)
+            
+        data = {
+            'valid': True,
+            'certificate_id': cert_id,
+            'student_name': f"{roadmap.user.first_name} {roadmap.user.last_name}".strip() or roadmap.user.username,
+            'course_title': roadmap.course.title,
+            'completion_date': roadmap.completed_at or roadmap.last_accessed_at,
+            'issue_date': roadmap.completed_at or roadmap.last_accessed_at,
+        }
+        return Response(data)
+    except Roadmap.DoesNotExist:
+        return Response({'valid': False, 'error': 'Certificate ID not found'}, status=404)
 
 
 # ===== Study Room / Study Session API =====

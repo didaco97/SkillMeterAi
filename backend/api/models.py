@@ -110,6 +110,8 @@ class Roadmap(models.Model):
     current_concept = models.IntegerField(default=0)
     started_at = models.DateTimeField(auto_now_add=True)
     last_accessed_at = models.DateTimeField(auto_now=True)
+    completed_at = models.DateTimeField(null=True, blank=True, help_text="When the course was completed (progress=100%)")
+    certificate_id = models.CharField(max_length=50, unique=True, null=True, blank=True, help_text="Unique hash for certificate verification")
 
     def __str__(self):
         return f"{self.user.username} - {self.course.title}"

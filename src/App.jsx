@@ -19,6 +19,7 @@ import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
 import PracticeLab from "./pages/PracticeLab";
 import StudyRoom from "./pages/StudyRoom";
+import VerifyCertificate from "./pages/VerifyCertificate";
 import NotFound from "./pages/NotFound";
 import { useEffect } from "react";
 import { toast } from "sonner";
@@ -53,6 +54,7 @@ const App = () => {
                 <Route path="/login" element={<Login />} />
                 <Route path="/signup" element={<Signup />} />
                 <Route path="/onboarding" element={<Onboarding />} />
+                <Route path="/verify" element={<VerifyCertificate />} />
 
                 {/* Protected Routes */}
                 <Route path="/dashboard" element={<Dashboard />} />

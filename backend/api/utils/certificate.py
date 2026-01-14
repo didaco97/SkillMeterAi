@@ -1,10 +1,13 @@
 import io
 import os
+import qrcode
+from PIL import Image
 from datetime import datetime
 from reportlab.lib.pagesizes import letter, landscape
 from reportlab.lib import colors
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import inch
+from reportlab.lib.utils import ImageReader
 
 # Get the path to static images
 # Assuming this file is in backend/api/utils/, we go up two levels to backend/api/static
@@ -118,6 +121,38 @@ def generate_certificate_pdf(user_name, course_title, completion_date, cert_id):
     # Signature line (right)
     p.line(width/2 + 50, 130, width/2 + 250, 130)
     p.drawCentredString(width/2 + 150, 115, "Date of Issue")
+    
+    # --- QR Code Verification ---
+    # Verification URL (Dev Env)
+    verify_url = f"http://localhost:8080/verify?id={cert_id}"
+    
+    # Generate QR Code
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_H,
+        box_size=10,
+        border=1,
+    )
+    qr.add_data(verify_url)
+    qr.make(fit=True)
+    
+    qr_img = qr.make_image(fill_color="black", back_color="white")
+    
+    # Save QR to a temporary stream to read it into ReportLab
+    qr_buffer = io.BytesIO()
+    qr_img.save(qr_buffer, format="PNG")
+    qr_buffer.seek(0)
+    
+    # Draw QR Code (Bottom Left)
+    # Using ImageReader to handle the stream
+    qr_image = ImageReader(qr_buffer)
+    p.drawImage(qr_image, 50, 50, width=80, height=80, preserveAspectRatio=True, mask='auto')
+    
+    # "Scan to Verify" Text
+    p.setFont("Helvetica", 8)
+    p.setFillColor(colors.Color(0.5, 0.5, 0.5))
+    p.drawString(50, 40, "Scan to Verify")
+
     
     p.showPage()
     p.save()
