@@ -10,7 +10,7 @@ import logging
 genai.configure(api_key=settings.GEMINI_API_KEY)
 
 class YouTubeService:
-    API_KEY = "AIzaSyApTJdGLXyO6AnjjV6zHtsQetQdmJo_WdM"
+    API_KEY = "AIzaSyB4EHKDlEUrUXrsEOndDLGQ6GnGMgmnMWA"
     
     @staticmethod
     def search_video(query):
@@ -156,9 +156,9 @@ class ContentDiscoveryService:
             return data
             
         except Exception as e:
-            print(f"Gemini API Error: {e}")
-            # Fallback mock data if API fails (for robustness)
-            return None
+            error_msg = str(e)
+            print(f"Gemini API Error: {error_msg}")
+            return {"error": error_msg}
 
 class NotesGeneratorService:
     @staticmethod

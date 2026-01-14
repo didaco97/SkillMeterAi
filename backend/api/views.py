@@ -419,8 +419,14 @@ def generate_roadmap_ai(request):
     ai_data = ContentDiscoveryService.search_videos(topic, skill_level)
     print(f"DEBUG: ContentDiscoveryService returned: {ai_data is not None}")
     
-    if not ai_data or 'course' not in ai_data:
-        return Response({'error': 'Could not generate content. Try again.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    if not ai_data:
+        return Response({'error': 'AI Service returned no data.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    if 'error' in ai_data:
+        return Response({'error': f"AI Generation Failed: {ai_data['error']}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    if 'course' not in ai_data:
+        return Response({'error': 'AI returned invalid format. Try again.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     course_data = ai_data['course']
     

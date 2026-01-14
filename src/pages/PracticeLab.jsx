@@ -2,6 +2,7 @@ import { useState } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { CodeEditor } from "@/components/ide/CodeEditor";
 import { LabSidebar } from "@/components/ide/LabSidebar";
+import { FocusPanel } from "@/components/ide/FocusPanel";
 import { CODE_SNIPPETS } from "@/api/piston";
 import { createLab, updateLab } from "@/api/labs";
 import { toast } from "sonner";
@@ -96,6 +97,9 @@ export default function PracticeLab() {
                     </div>
                 </div>
             </div>
+
+            {/* Focus Monitoring Panel */}
+            <FocusPanel />
         </DashboardLayout>
     );
 }
