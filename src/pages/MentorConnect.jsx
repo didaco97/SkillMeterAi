@@ -1,4 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import BookingModal from '../components/dashboard/BookingModal';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -7,8 +9,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Filter, Video, Mic, MessageSquare, Star, Clock, Calendar, CheckCircle2, Play, Pause, RefreshCw, Smartphone, Linkedin } from 'lucide-react';
+import { Search, Filter, Video, Mic, MessageSquare, Star, Clock, Calendar, CheckCircle2, Play, Pause, RefreshCw, Smartphone, Linkedin, Loader2, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import { useInterviewWebSocket } from '../hooks/useInterviewWebSocket';
 
 // --- MOCK DATA ---
 const MENTORS = [
@@ -113,66 +116,164 @@ const INTERVIEW_TOPICS = [
     { title: "DSA & Algos", count: "40 Qs", color: "bg-red-100" },
 ];
 
-const INTERVIEW_QUESTIONS = {
-    "Frontend (React)": [
-        "What are React Hooks and why were they introduced?",
-        "Explain the Virtual DOM and how it improves performance.",
-        "What is the difference between state and props?",
-        "How does the useEffect dependency array work?",
-        "Explain the concept of Higher-Order Components (HOCs)."
-    ],
-    "Backend (Node)": [
-        "What is the Event Loop in Node.js?",
-        "Explain the difference between process.nextTick() and setImmediate().",
-        "How do you handle errors in async/await functions?",
-        "What are Streams in Node.js and why are they useful?",
-        "Explain the role of middleware in Express.js."
-    ],
-    "System Design": [
-        "Design a URL shortening service like Bit.ly.",
-        "How would you design a scalable notification system?",
-        "Explain the difference between vertical and horizontal scaling.",
-        "Design a chat application like WhatsApp.",
-        "What is consistent hashing and where is it used?"
-    ],
-    "Behavioral": [
-        "Tell me about a time you faced a technical challenge and how you solved it.",
-        "How do you handle conflict in a team setting?",
-        "Describe a situation where you had to meet a tight deadline.",
-        "Tell me about a time you failed and what you learned from it.",
-        "Where do you see yourself in 5 years?"
-    ],
-    "DSA & Algos": [
-        "Explain the difference between a stack and a queue.",
-        "How does a hash table work and what is collision resolution?",
-        "What is the time complexity of QuickSort?",
-        "Explain Breadth-First Search (BFS) vs Depth-First Search (DFS).",
-        "How would you detect a cycle in a linked list?"
-    ]
-};
+
+
+import api from '../api/api';
+
+// ... (imports remain)
 
 export default function MentorConnect() {
+    const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState('find-mentors');
     const [filter, setFilter] = useState('');
     const [selectedTopic, setSelectedTopic] = useState("Behavioral");
+    const [experienceLevel, setExperienceLevel] = useState("mid");
+    const [simulationDuration, setSimulationDuration] = useState("15");
+
+    // WebSocket Hook for Real-Time Interview
+    const {
+        isConnected: wsConnected,
+        currentQuestion: wsQuestion,
+        interviewReport: wsReport,
+        isLoading: wsLoading,
+        error: wsError,
+        connect: wsConnect,
+        initSession,
+        submitAnswer,
+        endSession: wsEndSession,
+        reset: wsReset
+    } = useInterviewWebSocket();
+
+    // Fallback to local state if WebSocket not connected
+    const [localQuestion, setLocalQuestion] = useState("Waiting to start...");
+    const [localReport, setLocalReport] = useState(null);
+
+    // Use WebSocket data if connected, otherwise use local fallback
+    const activeQuestion = wsConnected ? wsQuestion : localQuestion;
+    const interviewReport = wsConnected ? wsReport : localReport;
+
+    // Mentor Data State
+    const [mentors, setMentors] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    // My Sessions State
+    const [mySessions, setMySessions] = useState([]);
+
+    // Booking Modal State
+    const [isBookingOpen, setIsBookingOpen] = useState(false);
+    const [selectedMentor, setSelectedMentor] = useState(null);
+
+    // Fetch Mentors from Backend
+    useEffect(() => {
+        const fetchMentors = async () => {
+            try {
+                const res = await api.get('/mentors/');
+                // Backend returns: 
+                // { id, user: {first, last, email}, title, company, hourlyRate, about, skills, image... }
+                // Map to UI shape if needed, or use directly.
+                // Let's assume backend serializer structure is flat enough or we adapt here.
+
+                const mapped = res.data.map(m => ({
+                    id: m.id,
+                    name: `${m.firstName} ${m.lastName}`,
+                    role: m.title,
+                    company: m.company,
+                    // Use dicebear if no image provided
+                    image: `https://api.dicebear.com/7.x/lorelei/svg?seed=${m.firstName}`,
+                    skills: m.skills || [],
+                    rating: m.averageRating || 5.0,
+                    reviews: 0, // Not yet in backend
+                    price: `₹${m.hourlyRate}/min`, // Ensure backend sends per-min or we calc
+                    availability: 'Flexible', // Placeholder
+                    color: 'bg-[#4ecdc4]', // Cyclic or random colors
+                    linkedin: '#'
+                }));
+                setMentors(mapped);
+            } catch (err) {
+                console.error("Failed to fetch mentors", err);
+                toast.error("Could not load mentors.");
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        if (activeTab === 'find-mentors') {
+            fetchMentors();
+        }
+    }, [activeTab]);
+
+    // Fetch My Sessions
+    useEffect(() => {
+        const fetchMySessions = async () => {
+            try {
+                const res = await api.get('/bookings/my-sessions/');
+                // Map backend data
+                const mapped = res.data.map(b => ({
+                    id: b.id,
+                    mentor_name: b.mentorName || "Unknown Mentor",
+                    topic: b.topic,
+                    created_at: b.created_at,
+                    status: b.status,
+                    meeting_link: b.meetingLink
+                }));
+                setMySessions(mapped);
+            } catch (err) {
+                console.error("Failed to fetch my sessions", err);
+            }
+        };
+
+        if (activeTab === 'my-sessions') {
+            fetchMySessions();
+        }
+    }, [activeTab]);
+
+    const handleConnect = (mentor) => {
+        setSelectedMentor(mentor);
+        setIsBookingOpen(true);
+    };
 
     // Interview Simulator State
     const [isInterviewActive, setIsInterviewActive] = useState(false);
-    const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+    const [isRecordingAnswer, setIsRecordingAnswer] = useState(false);
     const [recordingTime, setRecordingTime] = useState(0);
+    const [transcript, setTranscript] = useState("");
     const videoRef = useRef(null);
+    const recognitionRef = useRef(null);
 
-    // Get current questions based on topic
-    const currentQuestions = INTERVIEW_QUESTIONS[selectedTopic] || INTERVIEW_QUESTIONS["Behavioral"];
-
-    // Reset index when topic changes
+    // Initialize Speech Recognition
     useEffect(() => {
-        setCurrentQuestionIndex(0);
+        if ('webkitSpeechRecognition' in window) {
+            const recognition = new window.webkitSpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            recognition.lang = 'en-US';
+
+            recognition.onresult = (event) => {
+                let finalTranscript = '';
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    if (event.results[i].isFinal) {
+                        finalTranscript += event.results[i][0].transcript;
+                    }
+                }
+                if (finalTranscript) {
+                    setTranscript(prev => prev + " " + finalTranscript);
+                }
+            };
+
+            recognitionRef.current = recognition;
+        }
+    }, []);
+
+    // Reset state when topic changes
+    useEffect(() => {
         setIsInterviewActive(false);
-    }, [selectedTopic]);
+        setLocalQuestion("Waiting to start...");
+        setLocalReport(null);
+        wsReset();
+    }, [selectedTopic, wsReset]);
 
     // Filter Mentors
-    const filteredMentors = MENTORS.filter(m =>
+    const filteredMentors = mentors.filter(m =>
         m.name.toLowerCase().includes(filter.toLowerCase()) ||
         m.skills.some(s => s.toLowerCase().includes(filter.toLowerCase()))
     );
@@ -204,20 +305,97 @@ export default function MentorConnect() {
         return () => clearInterval(interval);
     }, [isInterviewActive]);
 
-    const startInterview = () => {
-        setIsInterviewActive(true);
-        setCurrentQuestionIndex(0);
+    const startInterview = async () => {
         setRecordingTime(0);
-        toast.success("Interview session started. Good luck!");
+        setIsInterviewActive(true);
+        setLocalReport(null);
+        setTranscript("");
+
+        // Try WebSocket first
+        if (!wsConnected) {
+            wsConnect();
+            // Wait a bit for connection
+            await new Promise(resolve => setTimeout(resolve, 500));
+        }
+
+        // Get user ID from localStorage if available
+        const userData = localStorage.getItem('user');
+        const userId = userData ? JSON.parse(userData).id : null;
+
+        if (wsConnected) {
+            // Real-time AI Interview via WebSocket
+            initSession(selectedTopic, experienceLevel, parseInt(simulationDuration), userId);
+            toast.success("Connecting to AI Interviewer...");
+        } else {
+            // Fallback to local simulation
+            setLocalQuestion(`Hello! I see you're interested in ${selectedTopic}. Let's start with a brief introduction.`);
+            toast.success("Interview session started. Good luck!");
+        }
     };
 
-    const stopInterview = () => {
+    const startRecordingAnswer = () => {
+        setIsRecordingAnswer(true);
+        setTranscript("");
+        if (recognitionRef.current) {
+            try {
+                recognitionRef.current.start();
+            } catch (e) {
+                console.error("Speech recognition error:", e);
+            }
+        }
+    };
+
+    const stopRecordingAnswer = () => {
+        setIsRecordingAnswer(false);
+        if (recognitionRef.current) {
+            try {
+                recognitionRef.current.stop();
+            } catch (e) {
+                console.error("Speech recognition stop error:", e);
+            }
+        }
+
+        // Send answer to backend
+        if (wsConnected) {
+            const answerText = transcript.trim() || "(No speech detected)";
+            submitAnswer(answerText);
+            toast.info("Answer submitted. Processing...");
+        } else {
+            // Local fallback simulation
+            toast.info("Processing answer...");
+            setTimeout(() => {
+                setLocalQuestion("That's interesting. Can you elaborate on the trade-offs?");
+            }, 1000);
+        }
+    };
+
+    const endInterviewSession = () => {
         setIsInterviewActive(false);
-        toast("Interview ended. Recording saved to 'My Progress'.");
-    };
+        setIsRecordingAnswer(false);
+        if (recognitionRef.current) {
+            try {
+                recognitionRef.current.stop();
+            } catch (e) { }
+        }
 
-    const nextQuestion = () => {
-        setCurrentQuestionIndex(prev => (prev + 1) % currentQuestions.length);
+        if (wsConnected) {
+            // End WebSocket session - will trigger analysis
+            wsEndSession();
+            toast.info("AI is analyzing your performance...");
+        } else {
+            // Local fallback simulation
+            toast.info("Analyzing interview performance...");
+            setTimeout(() => {
+                setLocalReport({
+                    score: 82,
+                    feedback: "Strong technical understanding but work on conciseness.",
+                    strengths: ["React Hooks knowledge", "System Design approach"],
+                    weaknesses: ["Explanation of useEffect was vague", "Missed error handling in code"],
+                    transcript: "Interviewer: What is a Hook?\nUser: A hook is..."
+                });
+                toast.success("Performance Report Ready!");
+            }, 1500);
+        }
     };
 
     const formatTime = (seconds) => {
@@ -268,13 +446,19 @@ export default function MentorConnect() {
                             <TabsList className="flex-col h-auto items-stretch bg-transparent space-gap-0 p-0 rounded-none border-2 border-black shadow-[6px_6px_0px_0px_#000] bg-white">
                                 <TabsTrigger
                                     value="find-mentors"
-                                    className="rounded-none justify-start px-6 py-4 text-base font-bold type-button data-[state=active]:bg-[#ff00ff] data-[state=active]:text-white border-b-2 border-black last:border-0 hover:bg-gray-100 transition-colors"
+                                    className="rounded-none justify-start md:px-6 px-4 py-4 text-base font-bold type-button data-[state=active]:bg-[#ff00ff] data-[state=active]:text-white border-b-2 border-black last:border-0 hover:bg-gray-100 transition-colors"
                                 >
                                     <Search className="mr-3 h-5 w-5" /> Find Mentors
                                 </TabsTrigger>
                                 <TabsTrigger
+                                    value="my-sessions"
+                                    className="rounded-none justify-start md:px-6 px-4 py-4 text-base font-bold type-button data-[state=active]:bg-[#adfa1d] data-[state=active]:text-black border-b-2 border-black last:border-0 hover:bg-gray-100 transition-colors"
+                                >
+                                    <Clock className="mr-3 h-5 w-5" /> My Sessions
+                                </TabsTrigger>
+                                <TabsTrigger
                                     value="simulator"
-                                    className="rounded-none justify-start px-6 py-4 text-base font-bold data-[state=active]:bg-[#adfa1d] data-[state=active]:text-black hover:bg-gray-100 transition-colors"
+                                    className="rounded-none justify-start md:px-6 px-4 py-4 text-base font-bold data-[state=active]:bg-[#ff9f1c] data-[state=active]:text-black hover:bg-gray-100 transition-colors"
                                 >
                                     <Video className="mr-3 h-5 w-5" /> Simulator
                                 </TabsTrigger>
@@ -398,7 +582,7 @@ export default function MentorConnect() {
                                                                 <Button
                                                                     size="sm"
                                                                     className="rounded-none border-2 border-black bg-black text-white hover:bg-[#ff00ff] hover:text-white font-bold tracking-wider uppercase shadow-[3px_3px_0px_0px_#888] hover:shadow-[1px_1px_0px_0px_#000] hover:translate-y-[2px] transition-all"
-                                                                    onClick={() => toast.success(`Request sent to ${mentor.name}!`)}
+                                                                    onClick={() => handleConnect(mentor)}
                                                                 >
                                                                     Connect Now
                                                                 </Button>
@@ -412,101 +596,273 @@ export default function MentorConnect() {
                                 </div>
                             </TabsContent>
 
+                            <TabsContent value="my-sessions" className="flex-1 flex flex-col min-h-0 mt-0 data-[state=active]:flex overflow-y-auto">
+                                <div className="max-w-4xl mx-auto w-full space-y-8">
+                                    {/* Latest / Pending Request */}
+                                    {mySessions.length > 0 && mySessions[0].status.toLowerCase() === 'pending' && (
+                                        <Card className="rounded-none border-2 border-black shadow-[8px_8px_0px_0px_#000] bg-yellow-100">
+                                            <CardHeader className="border-b-2 border-black">
+                                                <CardTitle className="flex justify-between items-center text-black">
+                                                    <span className="text-2xl font-black uppercase tracking-tighter">Latest Request</span>
+                                                    <Badge className="rounded-none border-2 border-black bg-yellow-300 text-black font-bold uppercase shadow-[2px_2px_0px_0px_#000]">Pending Approval</Badge>
+                                                </CardTitle>
+                                            </CardHeader>
+                                            <CardContent className="p-6">
+                                                <div className="flex flex-col md:flex-row gap-6 items-center">
+                                                    <div className="relative">
+                                                        <div className="absolute inset-0 bg-black rounded-full translate-x-1 translate-y-1"></div>
+                                                        <img src={`https://api.dicebear.com/7.x/lorelei/svg?seed=${mySessions[0].mentor_name}`} alt="Mentor" className="relative w-24 h-24 rounded-full border-2 border-black bg-white" />
+                                                    </div>
+                                                    <div className="flex-1 text-center md:text-left space-y-2">
+                                                        <h3 className="text-3xl font-black uppercase text-black">{mySessions[0].topic}</h3>
+                                                        <p className="text-lg font-bold text-gray-800">with {mySessions[0].mentor_name}</p>
+                                                        <div className="flex items-center justify-center md:justify-start gap-4 text-sm font-bold mt-2">
+                                                            <span className="flex items-center gap-1 bg-white px-2 border border-black"><Calendar className="h-4 w-4" /> {new Date(mySessions[0].created_at).toLocaleDateString()}</span>
+                                                            <span className="flex items-center gap-1 bg-white px-2 border border-black"><Clock className="h-4 w-4" /> {new Date(mySessions[0].created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                                        </div>
+                                                    </div>
+                                                    <Button disabled className="rounded-none h-14 px-8 border-2 border-black bg-gray-300 text-gray-500 font-black uppercase tracking-wider text-xl cursor-not-allowed opacity-50">
+                                                        Waiting for Accept...
+                                                    </Button>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    )}
+
+                                    <div className="space-y-4">
+                                        <h3 className="text-xl font-black uppercase border-b-4 border-black inline-block pb-1">All Activity</h3>
+                                        <div className="grid gap-4">
+                                            {mySessions.length === 0 ? (
+                                                <div className="text-center p-8 border-2 border-dashed border-gray-300 text-gray-500 font-bold">
+                                                    No sessions found. Book a mentor to get started!
+                                                </div>
+                                            ) : (
+                                                mySessions.map((session) => (
+                                                    <Card key={session.id} className="rounded-none border-2 border-black shadow-[4px_4px_0px_0px_#ccc] hover:shadow-[2px_2px_0px_0px_#000] transition-all bg-white">
+                                                        <CardContent className="p-4 flex flex-col md:flex-row items-center gap-4">
+                                                            <div className="h-12 w-12 bg-gray-100 border-2 border-black rounded-full flex items-center justify-center font-black">
+                                                                {session.mentor_name[0]}
+                                                            </div>
+                                                            <div className="flex-1 text-center md:text-left">
+                                                                <h4 className="font-bold text-lg">{session.topic}</h4>
+                                                                <p className="text-sm font-medium text-gray-500">with {session.mentor_name} • {new Date(session.created_at).toLocaleString()}</p>
+                                                            </div>
+                                                            <div className="flex items-center gap-3 w-full md:w-auto justify-center">
+                                                                <Badge variant="outline" className={`rounded-none border-black uppercase ${session.status === 'CONFIRMED' ? 'bg-green-300 text-black' :
+                                                                    session.status === 'CANCELLED' ? 'bg-red-200 text-red-700' : 'bg-yellow-200'
+                                                                    }`}>
+                                                                    {session.status}
+                                                                </Badge>
+
+                                                                {session.status === 'CONFIRMED' && session.meeting_link && (
+                                                                    <Button
+                                                                        onClick={() => navigate(`/room/${session.id}`)}
+                                                                        className="rounded-none bg-black text-white hover:bg-[#adfa1d] hover:text-black border-2 border-black font-bold uppercase tracking-wider shadow-[2px_2px_0px_0px_#888]"
+                                                                    >
+                                                                        Join Now
+                                                                    </Button>
+                                                                )}
+                                                            </div>
+                                                        </CardContent>
+                                                    </Card>
+                                                ))
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            </TabsContent>
+
                             <TabsContent value="simulator" className="flex-1 flex flex-col min-h-0 mt-0 overflow-y-auto pr-4 pb-4 border-2 border-transparent data-[state=active]:flex">
+                                {/* ... existing simulator code ... */}
                                 <div className="grid lg:grid-cols-3 gap-6">
                                     {/* Left: Video & Controls */}
                                     <div className="lg:col-span-2 space-y-6">
                                         <Card className="rounded-none border-2 border-black shadow-[8px_8px_0px_0px_#adfa1d] overflow-hidden bg-black">
-                                            <div className="relative aspect-video flex items-center justify-center bg-gray-900 border-b-2 border-white">
-                                                {isInterviewActive ? (
-                                                    <>
-                                                        <video ref={videoRef} autoPlay muted playsInline className="w-full h-full object-cover transform scale-x-[-1]" />
-                                                        <div className="absolute top-4 left-4 bg-[#ff0000] text-white px-3 py-1 font-mono text-sm font-bold animate-pulse flex items-center gap-2 border-2 border-white shadow-[4px_4px_0px_0px_#000]">
-                                                            <div className="w-3 h-3 bg-white rounded-full"></div> REC {formatTime(recordingTime)}
-                                                        </div>
-                                                    </>
-                                                ) : (
-                                                    <div className="text-center text-gray-500 space-y-4">
-                                                        <div className="inline-flex items-center justify-center w-24 h-24 rounded-full border-4 border-dashed border-gray-700">
-                                                            <Video className="h-10 w-10 text-gray-700" />
-                                                        </div>
-                                                        <p className="font-mono text-sm uppercase tracking-widest text-gray-400">Camera Feed Offline</p>
-                                                    </div>
-                                                )}
+                                            {/* Header with Level Selector */}
+                                            <div className="bg-white p-3 border-b-2 border-black flex justify-between items-center">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="h-3 w-3 rounded-full bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.6)]"></div>
+                                                    <span className="font-black text-xs uppercase tracking-wider">Live Simulation</span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-xs font-bold text-gray-500 uppercase">Duration:</span>
+                                                    <Select value={simulationDuration} onValueChange={setSimulationDuration} disabled={isInterviewActive}>
+                                                        <SelectTrigger className="h-7 w-[80px] rounded-none border-2 border-black text-xs font-bold uppercase shadow-[2px_2px_0px_0px_#000]">
+                                                            <SelectValue />
+                                                        </SelectTrigger>
+                                                        <SelectContent className="rounded-none border-2 border-black font-bold uppercase">
+                                                            <SelectItem value="2">2 Min (Quick)</SelectItem>
+                                                            <SelectItem value="3">3 Min</SelectItem>
+                                                            <SelectItem value="5">5 Min</SelectItem>
+                                                            <SelectItem value="10">10 Min</SelectItem>
+                                                            <SelectItem value="15">15 Min</SelectItem>
+                                                            <SelectItem value="20">20 Min</SelectItem>
+                                                            <SelectItem value="30">30 Min</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-xs font-bold text-gray-500 uppercase">Level:</span>
+                                                    <Select value={experienceLevel} onValueChange={setExperienceLevel} disabled={isInterviewActive}>
+                                                        <SelectTrigger className="h-7 w-[100px] rounded-none border-2 border-black text-xs font-bold uppercase shadow-[2px_2px_0px_0px_#000]">
+                                                            <SelectValue />
+                                                        </SelectTrigger>
+                                                        <SelectContent className="rounded-none border-2 border-black font-bold uppercase">
+                                                            <SelectItem value="junior">Junior</SelectItem>
+                                                            <SelectItem value="mid">Mid-Level</SelectItem>
+                                                            <SelectItem value="senior">Senior</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
                                             </div>
+
+                                            {/* Split Screen Video Area */}
+                                            <div className="relative aspect-video flex bg-gray-900 border-b-2 border-white">
+                                                {/* Left: AI Avatar (Placeholder for now) */}
+                                                <div className="w-1/2 border-r-2 border-white relative flex items-center justify-center bg-gray-800">
+                                                    <div className="text-center space-y-2 opacity-50">
+                                                        <div className="h-16 w-16 mx-auto rounded-full bg-black border-2 border-white flex items-center justify-center">
+                                                            <Smartphone className="h-8 w-8 text-white" />
+                                                        </div>
+                                                        <p className="text-[10px] font-mono text-white uppercase tracking-widest">AI Interviewer</p>
+                                                    </div>
+                                                    {/* In future, LiveKit VideoTrack goes here */}
+                                                </div>
+
+                                                {/* Right: User Webcam */}
+                                                <div className="w-1/2 relative overflow-hidden">
+                                                    {isInterviewActive ? (
+                                                        <>
+                                                            <video ref={videoRef} autoPlay muted playsInline className="w-full h-full object-cover transform scale-x-[-1]" />
+                                                            <div className="absolute top-2 left-2 bg-[#ff0000] text-white px-2 py-0.5 font-mono text-[10px] font-bold flex items-center gap-1 border border-white shadow-[2px_2px_0px_0px_#000]">
+                                                                REC {formatTime(recordingTime)}
+                                                            </div>
+                                                        </>
+                                                    ) : (
+                                                        <div className="w-full h-full flex flex-col items-center justify-center bg-gray-900 text-gray-500 space-y-2">
+                                                            <Video className="h-8 w-8" />
+                                                            <p className="font-mono text-[10px] uppercase tracking-widest">Camera Off</p>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {/* Controls */}
                                             <div className="p-4 bg-white border-t-2 border-black flex justify-between items-center">
-                                                <div className="flex gap-4">
-                                                    <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 border-2 border-black text-xs font-black uppercase">
-                                                        <Mic className="h-4 w-4" /> {isInterviewActive ? 'On' : 'Off'}
+                                                <div className="flex gap-3">
+                                                    <div className={`flex items-center gap-2 px-3 py-1.5 border-2 border-black text-xs font-black uppercase transition-colors ${isInterviewActive ? 'bg-black text-white' : 'bg-gray-100 text-gray-400'}`}>
+                                                        <Mic className="h-3 w-3" /> {isInterviewActive ? 'Listening' : 'Mic Off'}
                                                     </div>
                                                 </div>
                                                 {!isInterviewActive ? (
                                                     <Button onClick={startInterview} className="rounded-none border-2 border-black bg-[#adfa1d] hover:bg-[#8ce000] text-black font-black text-sm uppercase tracking-wider shadow-[4px_4px_0px_0px_#000] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_0px_#000] transition-all">
-                                                        <Play className="mr-2 h-5 w-5" /> Start Simulation
+                                                        <Play className="mr-2 h-4 w-4" /> Start Interview
                                                     </Button>
                                                 ) : (
-                                                    <Button onClick={stopInterview} className="rounded-none border-2 border-black bg-[#ff0000] text-white hover:bg-[#cc0000] font-black text-sm uppercase tracking-wider shadow-[4px_4px_0px_0px_#000] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_0px_#000] transition-all">
-                                                        <CheckCircle2 className="mr-2 h-5 w-5" /> Finish Session
+                                                    <Button onClick={endInterviewSession} className="rounded-none border-2 border-black bg-[#ff0000] text-white hover:bg-[#cc0000] font-black text-sm uppercase tracking-wider shadow-[4px_4px_0px_0px_#000] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_0px_#000] transition-all">
+                                                        <CheckCircle2 className="mr-2 h-4 w-4" /> End Session
                                                     </Button>
                                                 )}
                                             </div>
                                         </Card>
 
                                         {/* Question Board */}
-                                        <Card className="rounded-none border-2 border-black shadow-[6px_6px_0px_0px_#ff9f1c]">
-                                            <CardHeader className="border-b-2 border-black bg-yellow-300 py-3">
-                                                <CardTitle className="flex justify-between items-center text-sm font-black uppercase tracking-wider text-black">
-                                                    <span>Question {currentQuestionIndex + 1} / {currentQuestions.length}</span>
-                                                    <div className="flex gap-2">
-                                                        <Button
-                                                            variant="outline"
-                                                            size="icon"
-                                                            className="h-6 w-6 rounded-none border-2 border-black hover:bg-black hover:text-white"
-                                                            disabled={currentQuestionIndex === 0}
-                                                            onClick={() => setCurrentQuestionIndex(prev => Math.max(0, prev - 1))}
-                                                        >
-                                                            &larr;
-                                                        </Button>
-                                                        <Button
-                                                            variant="outline"
-                                                            size="icon"
-                                                            className="h-6 w-6 rounded-none border-2 border-black hover:bg-black hover:text-white"
-                                                            disabled={currentQuestionIndex === currentQuestions.length - 1}
-                                                            onClick={() => setCurrentQuestionIndex(prev => Math.min(currentQuestions.length - 1, prev + 1))}
-                                                        >
-                                                            &rarr;
-                                                        </Button>
+                                        {/* Question Board (Or Report) */}
+                                        {interviewReport ? (
+                                            <Card className="rounded-none border-2 border-black shadow-[6px_6px_0px_0px_#adfa1d] bg-black text-white">
+                                                <CardHeader className="border-b-2 border-white bg-black py-4">
+                                                    <CardTitle className="flex justify-between items-center text-xl font-black uppercase tracking-wider text-white">
+                                                        <span>Performance Report</span>
+                                                        <Badge className="bg-[#adfa1d] text-black border-2 border-white text-lg px-3 rounded-none">
+                                                            Score: {interviewReport.score}/100
+                                                        </Badge>
+                                                    </CardTitle>
+                                                </CardHeader>
+                                                <CardContent className="p-8 text-left bg-gray-900 min-h-[300px] space-y-6">
+                                                    <div>
+                                                        <h3 className="font-black uppercase text-[#adfa1d] mb-2 text-lg">Overall Feedback</h3>
+                                                        <p className="font-mono text-sm leading-relaxed text-gray-300 border-l-4 border-[#adfa1d] pl-4">
+                                                            "{interviewReport.feedback}"
+                                                        </p>
                                                     </div>
-                                                </CardTitle>
-                                            </CardHeader>
-                                            <CardContent className="p-8 text-center bg-white min-h-[300px] flex flex-col justify-center items-center">
-                                                <AnimatePresence mode="wait">
-                                                    <motion.div
-                                                        key={currentQuestionIndex}
-                                                        initial={{ opacity: 0, scale: 0.9 }}
-                                                        animate={{ opacity: 1, scale: 1 }}
-                                                        exit={{ opacity: 0, scale: 0.9 }}
-                                                        className="w-full max-w-2xl"
-                                                    >
-                                                        <h2 className="text-3xl font-black mb-6 leading-tight min-h-[4.5rem]">
-                                                            {currentQuestions[currentQuestionIndex]}
-                                                        </h2>
 
-                                                        <div className="flex justify-center gap-4">
-                                                            {!isInterviewActive ? (
-                                                                <Button size="lg" onClick={startInterview} className="rounded-none bg-black text-white hover:bg-[#4ecdc4] hover:text-black border-2 border-black shadow-[4px_4px_0px_0px_#000] font-bold text-lg px-8">
-                                                                    Start Answer
-                                                                </Button>
-                                                            ) : (
-                                                                <Button size="lg" onClick={stopInterview} className="rounded-none bg-red-500 text-white hover:bg-red-600 border-2 border-black shadow-[4px_4px_0px_0px_#000] font-bold text-lg px-8">
-                                                                    Stop Recording
-                                                                </Button>
-                                                            )}
+                                                    <div className="grid grid-cols-2 gap-8">
+                                                        <div>
+                                                            <h4 className="font-bold uppercase text-green-400 mb-2 flex items-center gap-2"><CheckCircle2 className="h-4 w-4" /> Strengths</h4>
+                                                            <ul className="list-disc list-inside space-y-1 text-sm text-gray-300 font-mono">
+                                                                {interviewReport.strengths.map((s, i) => <li key={i}>{s}</li>)}
+                                                            </ul>
                                                         </div>
-                                                    </motion.div>
-                                                </AnimatePresence>
-                                            </CardContent>
-                                        </Card>
+                                                        <div>
+                                                            <h4 className="font-bold uppercase text-red-400 mb-2 flex items-center gap-2"><Star className="h-4 w-4" /> Areas to Improve</h4>
+                                                            <ul className="list-disc list-inside space-y-1 text-sm text-gray-300 font-mono">
+                                                                {interviewReport.weaknesses.map((w, i) => <li key={i}>{w}</li>)}
+                                                            </ul>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="pt-6 border-t border-gray-700 flex justify-between items-center">
+                                                        <div className="text-xs text-gray-500 font-mono uppercase">Full Transcript Available</div>
+                                                        <div className="flex gap-4">
+                                                            <Button onClick={startInterview} variant="outline" className="rounded-none border-2 border-white text-white hover:bg-white hover:text-black font-bold uppercase transition-all">
+                                                                <RefreshCw className="mr-2 h-4 w-4" /> Retry
+                                                            </Button>
+                                                            <Button onClick={() => toast.success("Transcript Downloaded ( Simulated )")} className="rounded-none bg-[#adfa1d] text-black hover:bg-[#8ce000] border-2 border-white font-black uppercase shadow-[4px_4px_0px_0px_#fff] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_0px_#fff]">
+                                                                <Star className="mr-2 h-4 w-4" /> Download PDF
+                                                            </Button>
+                                                        </div>
+                                                    </div>
+                                                </CardContent>
+                                            </Card>
+                                        ) : (
+                                            <Card className="rounded-none border-2 border-black shadow-[6px_6px_0px_0px_#ff9f1c]">
+                                                <CardHeader className="border-b-2 border-black bg-yellow-300 py-3">
+                                                    <CardTitle className="flex justify-between items-center text-sm font-black uppercase tracking-wider text-black">
+                                                        <span>Current Question</span>
+                                                        <Badge className="bg-white text-black border-2 border-black text-xs font-bold px-2 rounded-none">
+                                                            {selectedTopic}
+                                                        </Badge>
+                                                    </CardTitle>
+                                                </CardHeader>
+                                                <CardContent className="p-8 text-center bg-white min-h-[300px] flex flex-col justify-center items-center">
+                                                    <AnimatePresence mode="wait">
+                                                        <motion.div
+                                                            key={activeQuestion}
+                                                            initial={{ opacity: 0, scale: 0.95 }}
+                                                            animate={{ opacity: 1, scale: 1 }}
+                                                            exit={{ opacity: 0, scale: 0.95 }}
+                                                            className="w-full max-w-3xl"
+                                                        >
+                                                            <h2 className="text-3xl md:text-4xl font-black mb-6 leading-tight min-h-[4.5rem] tracking-tight">
+                                                                "{activeQuestion}"
+                                                            </h2>
+
+                                                            <div className="flex justify-center gap-4">
+                                                                {!isInterviewActive ? (
+                                                                    <Button size="lg" onClick={startInterview} className="rounded-none bg-black text-white hover:bg-[#4ecdc4] hover:text-black border-2 border-black shadow-[4px_4px_0px_0px_#000] font-bold text-lg px-8 py-6 h-auto uppercase tracking-wide">
+                                                                        Start Answer
+                                                                    </Button>
+                                                                ) : (
+                                                                    <div className="flex flex-col items-center gap-2">
+                                                                        {!isRecordingAnswer ? (
+                                                                            <Button size="lg" onClick={startRecordingAnswer} className="rounded-none bg-[#adfa1d] text-black hover:bg-[#8ce000] border-2 border-black shadow-[4px_4px_0px_0px_#000] font-bold text-lg px-8 py-6 h-auto uppercase tracking-wide">
+                                                                                <Mic className="mr-2 h-5 w-5" /> Start Answer
+                                                                            </Button>
+                                                                        ) : (
+                                                                            <Button size="lg" onClick={stopRecordingAnswer} className="rounded-none bg-red-500 text-white hover:bg-red-600 border-2 border-black shadow-[4px_4px_0px_0px_#000] font-bold text-lg px-8 py-6 h-auto uppercase tracking-wide animate-pulse">
+                                                                                <div className="w-3 h-3 bg-white rounded-full mr-3"></div>
+                                                                                Stop & Submit
+                                                                            </Button>
+                                                                        )}
+                                                                        <p className="text-xs font-mono text-gray-400 mt-2 uppercase">AI is listening automatically</p>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </motion.div>
+                                                    </AnimatePresence>
+                                                </CardContent>
+                                            </Card>
+                                        )}
 
                                     </div>
 
@@ -552,6 +908,12 @@ export default function MentorConnect() {
                     </div>
                 </Tabs>
             </div>
+            <BookingModal
+                isOpen={isBookingOpen}
+                onClose={() => setIsBookingOpen(false)}
+                mentor={selectedMentor}
+                onBookingComplete={() => setActiveTab('my-sessions')}
+            />
         </DashboardLayout>
     );
 }

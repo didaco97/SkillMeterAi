@@ -122,6 +122,7 @@ export function AuthProvider({ children }) {
                 name: data.user.first_name || data.user.username,
                 avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${data.user.username}`,
                 role: 'student',
+                isMentor: data.user.isMentor || false,
                 onboardingCompleted: false,
             };
             localStorage.setItem(USER_KEY, JSON.stringify(userData));
@@ -134,7 +135,7 @@ export function AuthProvider({ children }) {
         }
     };
 
-    const signup = async (name, email, password) => {
+    const signup = async (name, email, password, isMentorSignup = false) => {
         try {
             const response = await fetch(`${API_URL}/auth/register/`, {
                 method: 'POST',
@@ -145,6 +146,7 @@ export function AuthProvider({ children }) {
                     password,
                     password2: password,
                     first_name: name,
+                    is_mentor: isMentorSignup, // Pass mentor flag to backend
                 }),
             });
 
@@ -166,8 +168,9 @@ export function AuthProvider({ children }) {
                 ...data.user,
                 name: data.user.first_name || data.user.username,
                 avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${data.user.username}`,
-                role: 'student',
-                onboardingCompleted: false,
+                role: isMentorSignup ? 'mentor' : 'student',
+                isMentor: data.user.isMentor || isMentorSignup,
+                onboardingCompleted: isMentorSignup ? true : false, // Mentors skip onboarding
             };
             localStorage.setItem(USER_KEY, JSON.stringify(userData));
             setUser(userData);

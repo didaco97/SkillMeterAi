@@ -9,10 +9,11 @@ from datetime import timedelta
 class UserRegistrationSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
     password2 = serializers.CharField(write_only=True, required=True)
+    is_mentor = serializers.BooleanField(write_only=True, required=False, default=False)
 
     class Meta:
         model = User
-        fields = ('username', 'email', 'password', 'password2', 'first_name', 'last_name')
+        fields = ('username', 'email', 'password', 'password2', 'first_name', 'last_name', 'is_mentor')
         extra_kwargs = {
             'first_name': {'required': True},
             'last_name': {'required': False},
@@ -25,7 +26,11 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
-        from .models import LearnerProfile
+        from .models import LearnerProfile, MentorProfile
+        
+        # Pop is_mentor before creating user
+        is_mentor = validated_data.pop('is_mentor', False)
+        validated_data.pop('password2')  # Remove password2 as it's not a User field
         
         user = User.objects.create(
             username=validated_data['username'],
@@ -36,20 +41,37 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         user.set_password(validated_data['password'])
         user.save()
         
-        # Auto-create LearnerProfile with default WhatsApp number
-        LearnerProfile.objects.get_or_create(
-            user=user,
-            defaults={'phone_number': '+919518380879'}
-        )
+        if is_mentor:
+            # Create MentorProfile for mentors
+            MentorProfile.objects.get_or_create(
+                user=user,
+                defaults={
+                    'title': 'Mentor',
+                    'hourly_rate': 10.00,
+                    'about': 'New mentor on SkillMeter',
+                    'skills': []
+                }
+            )
+        else:
+            # Auto-create LearnerProfile for students
+            LearnerProfile.objects.get_or_create(
+                user=user,
+                defaults={'phone_number': '+919518380879'}
+            )
         
         return user
 
 
 class UserSerializer(serializers.ModelSerializer):
+    isMentor = serializers.SerializerMethodField()
+    
     class Meta:
         model = User
-        fields = ('id', 'username', 'email', 'first_name', 'last_name', 'date_joined')
-        read_only_fields = ('id', 'date_joined')
+        fields = ('id', 'username', 'email', 'first_name', 'last_name', 'date_joined', 'isMentor')
+        read_only_fields = ('id', 'date_joined', 'isMentor')
+    
+    def get_isMentor(self, obj):
+        return hasattr(obj, 'mentor_profile')
 
 
 from .models import (
@@ -223,3 +245,41 @@ class StudySessionSerializer(serializers.ModelSerializer):
         model = StudySession
         fields = ('id', 'user', 'startedAt', 'endedAt', 'totalDuration', 'focusDuration', 'distractionCount', 'focusPercentage')
         read_only_fields = ('user', 'endedAt')
+
+
+from .models import MentorProfile, MentorSlot, Booking
+
+class MentorProfileSerializer(serializers.ModelSerializer):
+    hourlyRate = serializers.DecimalField(source='hourly_rate', max_digits=10, decimal_places=2)
+    totalEarnings = serializers.DecimalField(source='total_earnings', max_digits=12, decimal_places=2, read_only=True)
+    averageRating = serializers.FloatField(source='average_rating', read_only=True)
+    firstName = serializers.CharField(source='user.first_name', read_only=True)
+    lastName = serializers.CharField(source='user.last_name', read_only=True)
+    email = serializers.EmailField(source='user.email', read_only=True)
+    
+    class Meta:
+        model = MentorProfile
+        fields = ('id', 'user', 'firstName', 'lastName', 'email', 'title', 'company', 'hourlyRate', 'about', 'skills', 'is_verified', 'totalEarnings', 'averageRating', 'created_at')
+        read_only_fields = ('user', 'is_verified', 'totalEarnings', 'averageRating')
+
+class MentorSlotSerializer(serializers.ModelSerializer):
+    startTime = serializers.DateTimeField(source='start_time')
+    endTime = serializers.DateTimeField(source='end_time')
+    isBooked = serializers.BooleanField(source='is_booked')
+
+    class Meta:
+        model = MentorSlot
+        fields = ('id', 'mentor', 'startTime', 'endTime', 'isBooked')
+        read_only_fields = ('mentor',)
+
+class BookingSerializer(serializers.ModelSerializer):
+    mentorName = serializers.CharField(source='mentor.user.get_full_name', read_only=True)
+    mentorTitle = serializers.CharField(source='mentor.title', read_only=True)
+    learnerName = serializers.CharField(source='learner.get_full_name', read_only=True)
+    amountPaid = serializers.DecimalField(source='amount_paid', max_digits=10, decimal_places=2)
+    meetingLink = serializers.URLField(source='meeting_link', read_only=True)
+    
+    class Meta:
+        model = Booking
+        fields = ('id', 'learner', 'mentor', 'mentorName', 'mentorTitle', 'learnerName', 'slot', 'status', 'meetingLink', 'topic', 'amountPaid', 'created_at')
+        read_only_fields = ('learner', 'meetingLink', 'created_at')

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -18,14 +18,26 @@ export default function Signup() {
   const { signup } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const [searchParams] = useSearchParams();
+
+  // Check if signing up as mentor
+  const isMentorSignup = searchParams.get('role') === 'mentor';
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsLoading(true);
-    const success = await signup(name, email, password);
+
+    // Pass isMentorSignup flag to signup function
+    const success = await signup(name, email, password, isMentorSignup);
+
     if (success) {
-      toast({ title: 'Account created!', description: 'Let\'s set up your learning journey.' });
-      navigate('/onboarding');
+      if (isMentorSignup) {
+        toast({ title: 'Mentor account created!', description: 'Welcome to your Mentor Studio.' });
+        navigate('/mentor/dashboard');
+      } else {
+        toast({ title: 'Account created!', description: 'Let\'s set up your learning journey.' });
+        navigate('/onboarding');
+      }
     } else {
       toast({ title: 'Error', description: 'Failed to create account.', variant: 'destructive' });
     }

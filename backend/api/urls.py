@@ -11,7 +11,10 @@ from .views import (
     study_sessions_view, study_session_stats, verify_certificate,
     generate_roadmap_ai, DailyTaskListView, NotificationListView, 
     UserStatsView, ActivityLogView,
-    get_leaderboard, get_trending_topics
+    get_leaderboard, get_trending_topics,
+    MentorListCreateView, MentorDetailView, BookingCreateView, 
+    BookingListView, MentorDashboardBookingListView, update_booking_status,
+    mentor_stats_view, mentor_availability_view, mentor_payments_view
 )
 
 urlpatterns = [
@@ -61,4 +64,18 @@ urlpatterns = [
     # Study Room / Study Session endpoints
     path('study-sessions/', study_sessions_view, name='study_sessions'),
     path('study-sessions/stats/', study_session_stats, name='study_session_stats'),
+    
+    # Mentor Connect Endpoints
+    path('mentors/', MentorListCreateView.as_view(), name='mentor_list'),
+    path('mentors/<int:pk>/', MentorDetailView.as_view(), name='mentor_detail'),
+    
+    path('bookings/request/', BookingCreateView.as_view(), name='booking_request'),
+    path('bookings/my-sessions/', BookingListView.as_view(), name='booking_list_learner'),
+    path('bookings/mentor-sessions/', MentorDashboardBookingListView.as_view(), name='booking_list_mentor'),
+    path('bookings/<int:booking_id>/status/', update_booking_status, name='booking_update_status'),
+    
+    # Mentor Dashboard Real-Time Data
+    path('mentor/stats/', mentor_stats_view, name='mentor_stats'),
+    path('mentor/availability/', mentor_availability_view, name='mentor_availability'),
+    path('mentor/payments/', mentor_payments_view, name='mentor_payments'),
 ]

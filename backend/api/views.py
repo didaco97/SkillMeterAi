@@ -898,3 +898,211 @@ def get_trending_topics(request):
         print(f"Error fetching trending topics: {e}")
         return Response({'error': str(e)}, status=500)
 
+
+# ===== Mentor Connect API =====
+
+from .models import MentorProfile, MentorSlot, Booking
+from .serializers import MentorProfileSerializer, MentorSlotSerializer, BookingSerializer
+
+class MentorListCreateView(generics.ListCreateAPIView):
+    """
+    Public: List all mentors
+    """
+    queryset = MentorProfile.objects.all()
+    serializer_class = MentorProfileSerializer
+    permission_classes = [AllowAny]
+    
+    def get_queryset(self):
+        # Allow filtering by verification status, skills, etc.
+        # Temp: Show all mentors for dev/demo purposes
+        # qs = MentorProfile.objects.filter(is_verified=True)
+        qs = MentorProfile.objects.all()
+        return qs
+
+class MentorDetailView(generics.RetrieveAPIView):
+    """
+    Public: Get mentor details
+    """
+    queryset = MentorProfile.objects.all()
+    serializer_class = MentorProfileSerializer
+    permission_classes = [AllowAny]
+
+class BookingCreateView(generics.CreateAPIView):
+    """
+    Authenticated: Request a session
+    """
+    queryset = Booking.objects.all()
+    serializer_class = BookingSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def perform_create(self, serializer):
+        # Auto-assign learner
+        serializer.save(learner=self.request.user)
+
+class BookingListView(generics.ListAPIView):
+    """
+    Get My Sessions (as Learner)
+    """
+    serializer_class = BookingSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        return Booking.objects.filter(learner=self.request.user).order_by('-created_at')
+
+class MentorDashboardBookingListView(generics.ListAPIView):
+    """
+    Get My Sessions (as Mentor)
+    """
+    serializer_class = BookingSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        # Assuming user has a mentor profile
+        if not hasattr(self.request.user, 'mentor_profile'):
+            return Booking.objects.none()
+        return Booking.objects.filter(mentor=self.request.user.mentor_profile).order_by('-created_at')
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def update_booking_status(request, booking_id):
+    try:
+        booking = Booking.objects.get(id=booking_id)
+        
+        # Simple Mentor Logic for now
+        if not hasattr(request.user, 'mentor_profile') or booking.mentor != request.user.mentor_profile:
+             return Response({'error': 'Unauthorized'}, status=403)
+             
+        action = request.data.get('action') # 'accept', 'decline'
+        
+        if action == 'accept':
+            booking.status = 'CONFIRMED'
+            # Generate Meeting Link
+            sanitized_topic = booking.topic.replace(" ", "-") if booking.topic else "Session"
+            booking.meeting_link = f"https://meet.jit.si/SkillMeter-{booking.id}-{sanitized_topic}"
+            booking.save()
+            return Response({'status': 'Booking Confirmed', 'meeting_link': booking.meeting_link})
+            
+        elif action == 'decline':
+            booking.status = 'CANCELLED'
+            booking.save()
+            return Response({'status': 'Booking Declined'})
+            
+        return Response({'error': 'Invalid action'}, status=400)
+    except Booking.DoesNotExist:
+        return Response({'error': 'Booking not found'}, status=404)
+
+
+# =============================================
+# MENTOR DASHBOARD - REAL-TIME DATA APIs
+# =============================================
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def mentor_stats_view(request):
+    """Get mentor dashboard statistics"""
+    from .models import MentorProfile, Booking
+    from django.db.models import Sum, Avg, Count
+    from decimal import Decimal
+    
+    if not hasattr(request.user, 'mentor_profile'):
+        return Response({'error': 'Not a mentor'}, status=403)
+    
+    mentor = request.user.mentor_profile
+    bookings = Booking.objects.filter(mentor=mentor)
+    
+    # Calculate stats
+    total_earnings = bookings.filter(status='CONFIRMED').aggregate(
+        total=Sum('amount_paid')
+    )['total'] or Decimal('0')
+    
+    total_sessions = bookings.filter(status__in=['CONFIRMED', 'COMPLETED']).count()
+    
+    # For now, avg_rating is placeholder (would need a Review model)
+    avg_rating = 4.9
+    
+    # Profile views placeholder (would need analytics tracking)
+    profile_views = 0
+    
+    return Response({
+        'totalEarnings': float(total_earnings),
+        'totalSessions': total_sessions,
+        'avgRating': avg_rating,
+        'profileViews': profile_views,
+        'earningsChange': '+12%',  # Would calculate from historical data
+        'sessionsChange': f'+{min(total_sessions, 4)}'
+    })
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def mentor_availability_view(request):
+    """Get or update mentor availability slots"""
+    from .models import MentorProfile
+    
+    if not hasattr(request.user, 'mentor_profile'):
+        return Response({'error': 'Not a mentor'}, status=403)
+    
+    mentor = request.user.mentor_profile
+    
+    if request.method == 'GET':
+        # Return availability from mentor profile
+        # Using a JSON field or default structure
+        availability = getattr(mentor, 'availability', None) or {
+            'Mon': [],
+            'Tue': [],
+            'Wed': [],
+            'Thu': [],
+            'Fri': [],
+            'Sat': [],
+            'Sun': []
+        }
+        return Response(availability)
+    
+    elif request.method == 'POST':
+        # Update availability
+        new_availability = request.data.get('availability', {})
+        mentor.availability = new_availability
+        mentor.save()
+        return Response({'status': 'Availability updated', 'availability': new_availability})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def mentor_payments_view(request):
+    """Get mentor payment/transaction history"""
+    from .models import MentorProfile, Booking
+    from django.db.models import Sum
+    from decimal import Decimal
+    
+    if not hasattr(request.user, 'mentor_profile'):
+        return Response({'error': 'Not a mentor'}, status=403)
+    
+    mentor = request.user.mentor_profile
+    bookings = Booking.objects.filter(mentor=mentor, status__in=['CONFIRMED', 'COMPLETED'])
+    
+    # Calculate balances
+    total_earned = bookings.aggregate(total=Sum('amount_paid'))['total'] or Decimal('0')
+    # Assume 80% is withdrawable (20% platform fee withheld)
+    withdrawable = float(total_earned) * 0.8
+    pending = float(total_earned) * 0.2
+    
+    # Build transaction history from bookings
+    transactions = []
+    for booking in bookings.order_by('-created_at')[:20]:
+        transactions.append({
+            'id': f'TXN-{booking.id}',
+            'date': booking.created_at.strftime('%b %d, %Y'),
+            'type': 'Session Payment',
+            'amount': f'+₹{booking.amount_paid}',
+            'status': 'cleared' if booking.status == 'COMPLETED' else 'pending',
+            'learnerName': booking.learner.get_full_name() or booking.learner.username,
+            'topic': booking.topic
+        })
+    
+    return Response({
+        'withdrawableBalance': round(withdrawable, 2),
+        'pendingBalance': round(pending, 2),
+        'totalEarned': float(total_earned),
+        'transactions': transactions
+    })
+

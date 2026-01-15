@@ -112,6 +112,13 @@ export function Header() {
             </DropdownMenuContent>
           </DropdownMenu>
         </>) : (<>
+          <Button
+            variant="outline"
+            onClick={() => navigate('/signup?role=mentor')}
+            className="rounded-none border-2 border-[#ff00ff] text-[#ff00ff] hover:bg-[#ff00ff] hover:text-white transition-all font-bold"
+          >
+            Join as Mentor
+          </Button>
           <Button variant="ghost" onClick={() => navigate('/login')}>
             Log in
           </Button>

@@ -290,3 +290,90 @@ class NotificationLog(models.Model):
 
     def __str__(self):
         return f"{self.notification_type} - {self.event_name} - {self.user.username}"
+
+
+class MentorProfile(models.Model):
+    """
+    Profile extension for users who are mentors.
+    """
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='mentor_profile')
+    title = models.CharField(max_length=100, default='Mentor') # e.g. "Senior SDE @ Google"
+    company = models.CharField(max_length=100, default='', blank=True)
+    hourly_rate = models.DecimalField(max_digits=10, decimal_places=2, default=10.00)
+    about = models.TextField(default='', blank=True)
+    skills = models.JSONField(default=list) # e.g. ["React", "Python"]
+    availability = models.JSONField(default=dict, blank=True)  # Weekly schedule: {"Mon": ["10:00", "14:00"], ...}
+    is_verified = models.BooleanField(default=False)
+    total_earnings = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    average_rating = models.FloatField(default=0.0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.user.username} - {self.title}"
+
+class MentorSlot(models.Model):
+    """
+    Availability slots for mentors.
+    """
+    mentor = models.ForeignKey(MentorProfile, on_delete=models.CASCADE, related_name='slots')
+    start_time = models.DateTimeField()
+    end_time = models.DateTimeField()
+    is_booked = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f"{self.mentor.user.username} - {self.start_time}"
+
+    class Meta:
+        ordering = ['start_time']
+
+class Booking(models.Model):
+    """
+    Session booking between a learner and a mentor.
+    """
+    STATUS_CHOICES = [
+        ('PENDING', 'Pending'),
+        ('CONFIRMED', 'Confirmed'),
+        ('COMPLETED', 'Completed'),
+        ('CANCELLED', 'Cancelled')
+    ]
+
+    learner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='learner_bookings')
+    mentor = models.ForeignKey(MentorProfile, on_delete=models.CASCADE, related_name='mentor_bookings')
+    slot = models.OneToOneField(MentorSlot, on_delete=models.PROTECT, null=True, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+    meeting_link = models.URLField(blank=True)
+    topic = models.CharField(max_length=200) # e.g. "Mock Interview"
+    amount_paid = models.DecimalField(max_digits=10, decimal_places=2)
+    payment_id = models.CharField(max_length=100, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Booking {self.id} - {self.status}"
+
+
+class InterviewSession(models.Model):
+    """
+    Stores metrics and transcript for an AI Mock Interview session.
+    """
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='interview_sessions')
+    topic = models.CharField(max_length=100)
+    difficulty = models.CharField(max_length=20, default='mid')
+    duration = models.IntegerField(default=15) # minutes
+    
+    # Analysis Metrics (Populated after session)
+    score = models.IntegerField(default=0)
+    feedback = models.TextField(blank=True)
+    strengths = models.JSONField(default=list)
+    weaknesses = models.JSONField(default=list)
+    transcript = models.TextField(blank=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return f"{self.user.username} - {self.topic} ({self.created_at.strftime('%Y-%m-%d')})"
+
+    class Meta:
+        ordering = ['-created_at']

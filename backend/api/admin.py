@@ -1,7 +1,8 @@
 from django.contrib import admin
 from .models import (
     LearnerProfile, Course, Chapter, Concept, Roadmap, ConceptProgress,
-    Assessment, AssessmentResult, DailyTask, Notification, UserProgress, Lab
+    Assessment, AssessmentResult, DailyTask, Notification, UserProgress, Lab,
+    StudySession, NotificationLog, MentorProfile, MentorSlot, Booking
 )
 
 @admin.register(LearnerProfile)
@@ -125,3 +126,31 @@ class UserProgressAdmin(admin.ModelAdmin):
 class LabAdmin(admin.ModelAdmin):
     list_display = ('user', 'name', 'language', 'updated_at')
     list_editable = ('name', 'language')
+
+@admin.register(StudySession)
+class StudySessionAdmin(admin.ModelAdmin):
+    list_display = ('user', 'started_at', 'total_duration', 'focus_duration', 'focus_percentage')
+    list_filter = ('user',)
+
+@admin.register(NotificationLog)
+class NotificationLogAdmin(admin.ModelAdmin):
+    list_display = ('user', 'notification_type', 'event_name', 'status', 'created_at')
+    list_filter = ('notification_type', 'status')
+
+@admin.register(MentorProfile)
+class MentorProfileAdmin(admin.ModelAdmin):
+    list_display = ('user', 'title', 'company', 'hourly_rate', 'is_verified')
+    list_editable = ('is_verified', 'hourly_rate')
+    search_fields = ('user__username', 'title', 'company')
+    list_filter = ('is_verified',)
+
+@admin.register(MentorSlot)
+class MentorSlotAdmin(admin.ModelAdmin):
+    list_display = ('mentor', 'start_time', 'end_time', 'is_booked')
+    list_filter = ('is_booked', 'start_time')
+
+@admin.register(Booking)
+class BookingAdmin(admin.ModelAdmin):
+    list_display = ('learner', 'mentor', 'topic', 'status', 'amount_paid', 'created_at')
+    list_filter = ('status', 'created_at')
+    search_fields = ('learner__username', 'mentor__user__username', 'topic')

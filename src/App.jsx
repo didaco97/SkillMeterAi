@@ -21,7 +21,10 @@ import Settings from "./pages/Settings";
 import PracticeLab from "./pages/PracticeLab";
 import StudyRoom from "./pages/StudyRoom";
 import MentorConnect from './pages/MentorConnect';
+import MentorDashboard from "./pages/MentorDashboard";
+import MeetingRoom from "./pages/MeetingRoom";
 import VerifyCertificate from "./pages/VerifyCertificate";
+import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import { useEffect } from "react";
 import { toast } from "sonner";
@@ -68,6 +71,8 @@ const App = () => {
                 <Route path="/practice-lab" element={<PracticeLab />} />
                 <Route path="/study-room" element={<ProtectedRoute><StudyRoom /></ProtectedRoute>} />
                 <Route path="/mentor-connect" element={<ProtectedRoute><MentorConnect /></ProtectedRoute>} />
+                <Route path="/mentor/dashboard" element={<ProtectedRoute><MentorDashboard /></ProtectedRoute>} />
+                <Route path="/room/:roomId" element={<ProtectedRoute><MeetingRoom /></ProtectedRoute>} />
                 <Route path="/settings" element={<Settings />} />
 
                 {/* Catch-all */}

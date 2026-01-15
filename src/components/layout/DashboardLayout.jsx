@@ -1,27 +1,42 @@
 import { Link, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { LayoutDashboard, Map, BookOpen, BarChart3, Bell, Settings, User, ChevronLeft, ChevronRight, LogOut, FlaskConical, Brain, UserPlus } from 'lucide-react';
+import { Layout, Map, BookOpen, BarChart2, Bell, Settings, User, ChevronLeft, ChevronRight, LogOut, Code, Eye, Users, Briefcase } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
-const sidebarLinks = [
-  { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard' },
-  { icon: Map, label: 'My Roadmap', href: '/roadmap' },
-  { icon: BookOpen, label: 'Learning', href: '/learn' },
-  { icon: BarChart3, label: 'Progress', href: '/progress' },
-  { icon: FlaskConical, label: 'Practice Lab', href: '/practice-lab' },
-  { icon: Brain, label: 'Study Room', href: '/study-room' },
-  { icon: UserPlus, label: 'Mentor Connect', href: '/mentor-connect' },
-  { icon: User, label: 'Profile', href: '/profile' },
-  { icon: Settings, label: 'Settings', href: '/settings' },
-];
+const getSidebarLinks = (isMentor) => {
+  // Mentors see ONLY Mentor Studio and basic settings
+  if (isMentor) {
+    return [
+      { icon: Briefcase, label: 'Mentor Studio', path: '/mentor/dashboard' },
+      { icon: User, label: 'Profile', href: '/profile' },
+      { icon: Settings, label: 'Settings', href: '/settings' },
+    ];
+  }
+
+  // Students see learning-focused pages
+  return [
+    { icon: Layout, label: 'Dashboard', path: '/dashboard' },
+    { icon: Map, label: 'My Roadmap', path: '/roadmap' },
+    { icon: BookOpen, label: 'Learning', path: '/learn' },
+    { icon: BarChart2, label: 'Progress', path: '/progress' },
+    { icon: Code, label: 'Practice Lab', path: '/practice-lab' },
+    { icon: Eye, label: 'Study Room', path: '/study-room' },
+    { icon: Users, label: 'Mentor Connect', path: '/mentor-connect' },
+    { icon: User, label: 'Profile', href: '/profile' },
+    { icon: Settings, label: 'Settings', href: '/settings' },
+  ];
+};
 
 export function DashboardLayout({ children }) {
   const location = useLocation();
   const { user, logout } = useAuth();
+
+  // Get sidebar links based on mentor status
+  const sidebarLinks = getSidebarLinks(user?.isMentor);
 
   return (<div className="h-screen overflow-hidden flex bg-background">
     {/* Sidebar - Desktop */}
@@ -40,11 +55,12 @@ export function DashboardLayout({ children }) {
 
       <nav className="flex-1 p-4 space-y-1 overflow-y-auto no-scrollbar">
         {sidebarLinks.map((link) => {
-          const isActive = location.pathname === link.href;
+          const path = link.path || link.href;
+          const isActive = location.pathname === path;
           return (
             <Link
-              key={link.href}
-              to={link.href}
+              key={path}
+              to={path}
               className={cn(
                 'flex items-center gap-3 px-4 py-3 text-sm font-medium transition-all border-2 rounded-none',
                 isActive
@@ -84,8 +100,9 @@ export function DashboardLayout({ children }) {
     <nav className="lg:hidden fixed bottom-0 left-0 right-0 border-t border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-50">
       <div className="flex items-center justify-around py-2">
         {sidebarLinks.slice(0, 5).map((link) => {
-          const isActive = location.pathname === link.href;
-          return (<Link key={link.href} to={link.href} className={cn('flex flex-col items-center gap-1 px-3 py-2 rounded-lg transition-colors', isActive
+          const path = link.path || link.href;
+          const isActive = location.pathname === path;
+          return (<Link key={path} to={path} className={cn('flex flex-col items-center gap-1 px-3 py-2 rounded-lg transition-colors', isActive
             ? 'text-primary'
             : 'text-muted-foreground')}>
             <link.icon className="h-5 w-5" />
